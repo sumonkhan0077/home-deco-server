@@ -33,8 +33,7 @@ async function run() {
     const db = client.db("home_deco");
     const servicesCollection = db.collection("services");
     
-    // user data
-      // data pathaschi
+  
     app.post("/services", async (req, res) => {
       const newServices = req.body;
       const result = await servicesCollection.insertOne(newServices);
@@ -51,6 +50,13 @@ async function run() {
         // console.error("Error fetching products:", error);
         res.status(500).send({ message: "Server error" });
       }
+    });
+
+     app.get("/services/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await servicesCollection.findOne(query);
+      res.send(result);
     });
 
       app.get("/top_rating", async (req, res) => {
