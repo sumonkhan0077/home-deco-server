@@ -41,6 +41,24 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/services", async (req, res) => {
+      try {
+        // const query = req.body;
+        const result = await servicesCollection.find().toArray();
+        // console.log("Matched products:", result.length);
+        res.send(result);
+      } catch (error) {
+        // console.error("Error fetching products:", error);
+        res.status(500).send({ message: "Server error" });
+      }
+    });
+
+      app.get("/top_rating", async (req, res) => {
+      const cursor = servicesCollection.find().sort({ rating: -1 }).limit(8);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
    
 
     // await client.db("admin").command({ ping: 1 });
