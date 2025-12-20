@@ -37,41 +37,33 @@ async function run() {
     });
 
     app.get("/services", async (req, res) => {
+      const { search, type, limit, min, max } = req.query;
+      const query = {};
+      if (search) {
+        query.service_name = { $regex: search, $options: "i" };
+      }
+      if (type) {
+        query.service_category = { $regex: type, $options: "i" };
+      }
+      const minVal = parseInt(min);
+      const maxVal = parseInt(max);
+
+      if (!isNaN(minVal) && !isNaN(maxVal)) {
+        costs = { $elemMatch: { $gte: minVal, $lte: maxVal } };
+      } else if (!isNaN(minVal)) {
+        query.costs = { $gte: minVal };
+      } else if (!isNaN(maxVal)) {
+        query.costs = { $lte: maxVal };
+      }
+
       try {
-        const search = req.query.search;
-        const type = req.query.type; // category
-        const limit = parseInt(req.query.limit) || 0;
-        const min = parseInt(req.query.min);
-        const max = parseInt(req.query.max);
-        const query = {};
-
-        if (search) {
-          query.service_name = { $regex: search, $options: "i" }; 
-        }
-        if (type) {
-          query.service_category = { $regex: type, $options: "i" };
-        }
-        if (!isNaN(min) || !isNaN(max)) {
-          query["costs.0"] = {};
-
-          if (!isNaN(min)) {
-            query["costs.0"].$gte = min;
-          }
-          if (!isNaN(max)) {
-            query["costs.0"].$lte = max;
-          }
-        }
-
         const result = await servicesCollection
           .find(query)
-          .sort({ rating: -1 }) 
-          .limit(limit)
+          .limit(parseInt(limit) || 0)
           .toArray();
-
         res.send(result);
       } catch (error) {
-        console.error("Error fetching services:", error);
-        res.status(500).send({ error: "Server error" });
+        res.status(500).send({ message: "Error fetching services" });
       }
     });
 
