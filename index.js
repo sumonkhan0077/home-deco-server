@@ -2,6 +2,7 @@ const express = require("express");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -23,6 +24,13 @@ app.get("/", (req, res) => {
   res.send("export import server is running ");
 });
 
+function generateTrackingId() {
+  const prefix = "BDX-";
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const randomPart = Math.random().toString(16).substring(2, 8).toUpperCase();
+  return `${prefix}${date}-${randomPart}`;
+}
+
 async function run() {
   try {
     // await client.connect();
@@ -30,32 +38,34 @@ async function run() {
     const db = client.db("home_deco");
     const servicesCollection = db.collection("services");
     const usersCollection = db.collection("users");
+    const bookingCollection = db.collection("booking");
+    const paymentCollection = db.collection("payments");
 
     // users related apis
-    app.get("/users", verifyFBToken, async (req, res) => {
-      const searchText = req.query.searchText;
-      const query = {};
-      if (searchText) {
-        // query.displayName = {$regex: searchText, $options: 'i'}
-        query.$or = [
-          { displayName: { $regex: searchText, $options: "i" } },
-          { email: { $regex: searchText, $options: "i" } },
-        ];
-      }
-      const cursor = userCollection
-        .find(query)
-        .sort({ createdAt: -1 })
-        .limit(5);
-      const result = await cursor.toArray();
-      res.send(result);
-    });
+    // app.get("/users", verifyFBToken, async (req, res) => {
+    //   const searchText = req.query.searchText;
+    //   const query = {};
+    //   if (searchText) {
+    //     // query.displayName = {$regex: searchText, $options: 'i'}
+    //     query.$or = [
+    //       { displayName: { $regex: searchText, $options: "i" } },
+    //       { email: { $regex: searchText, $options: "i" } },
+    //     ];
+    //   }
+    //   const cursor = usersCollection
+    //     .find(query)
+    //     .sort({ createdAt: -1 })
+    //     .limit(5);
+    //   const result = await cursor.toArray();
+    //   res.send(result);
+    // });
 
-    app.get("/users/:email/role", async (req, res) => {
-      const email = req.params.email;
-      const query = { email };
-      const user = await userCollection.findOne(query);
-      res.send({ role: user?.role || "user" });
-    });
+    // app.get("/users/:email/role", async (req, res) => {
+    //   const email = req.params.email;
+    //   const query = { email };
+    //   const user = await usersCollection.findOne(query);
+    //   res.send({ role: user?.role || "user" });
+    // });
 
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -78,8 +88,169 @@ async function run() {
       res.send(result);
     });
 
+    app.post("/booking", async (req, res) => {
+      const booking = req.body;
+      const trackingId = generateTrackingId();
 
-    
+      booking.createdAt = new Date();
+      booking.trackingId = trackingId;
+      booking.paymentStatus = "pending";
+
+      const result = await bookingCollection.insertOne(booking);
+      res.send(result);
+    });
+
+    app.get("/dashboard/my-bookings", async (req, res) => {
+      const email = req.query.email;
+      const sort = req.query.sort || "desc";
+
+      const query = {};
+      if (email) {
+        query.email = email;
+      }
+
+      const sortValue = sort === "desc" ? -1 : 1;
+
+      const result = await bookingCollection
+        .find(query)
+        .sort({ createdAt: sortValue })
+        .toArray();
+
+      const totalBooking = await bookingCollection.countDocuments(query);
+
+      res.send({ result, totalBooking });
+    });
+
+    app.get("/booking/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookingCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.delete("/booking/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await bookingCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
+  
+
+    // paymant
+    app.post("/payment-checkout-session", async (req, res) => {
+      const packageInfo = req.body;
+      const amount = parseInt(packageInfo.cost) * 100;
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              unit_amount: amount,
+              product_data: {
+                name: `Please pay for: ${packageInfo.service_name}`,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        customer_email: packageInfo.email,
+        metadata: {
+          servicesId: packageInfo.servicesId,
+          trackingId: packageInfo.trackingId,
+          bookingId: packageInfo.bookingId,
+          service_name: packageInfo.service_name,
+        },
+
+        success_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.YOUR_DOMAIN}/dashboard/payment-cancelled`,
+      });
+      res.send(session.url);
+    });
+
+    app.patch("/payment-success", async (req, res) => {
+      try {
+        const sessionId = req.query.session_id;
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+        const transactionId = session.payment_intent;
+
+        const paymentExist = await paymentCollection.findOne({ transactionId });
+        if (paymentExist) {
+          return res.send({
+            message: "already exists",
+            transactionId,
+            trackingId: paymentExist.trackingId,
+          });
+        }
+
+        const trackingId = session.metadata.trackingId;
+        const bookingId = session.metadata.bookingId;
+        const servicesId  = session.metadata.servicesId
+        const service_name= session.metadata.service_name
+
+        if (session.payment_status === "paid") {
+          await bookingCollection.updateOne(
+            { _id: new ObjectId(bookingId) },
+            {
+              $set: {
+                paymentStatus: "paid",
+                transactionId,
+                paidAt: new Date(),
+              },
+            }
+          );
+
+          const payment = {
+            bookingId,
+            trackingId,
+            transactionId,
+            servicesId,
+            service_name,
+            amount: session.amount_total / 100,
+            currency: session.currency,
+            email: session.customer_email,
+            paidAt: new Date(),
+          };
+
+          await paymentCollection.insertOne(payment);
+
+          return res.send({
+            success: true,
+            transactionId,
+            trackingId,
+          });
+        }
+
+        res.send({ success: false });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: "Payment success error" });
+      }
+    });
+
+     app.get("/payment-history", async (req, res) => {
+      const email = req.query.email;
+      const sort = req.query.sort || "desc";
+
+      const query = {};
+      if (email) {
+        query.email = email;
+      }
+
+      const sortValue = sort === "desc" ? -1 : 1;
+
+      const result = await paymentCollection
+        .find(query)
+        .sort({ createdAt: sortValue })
+        .toArray();
+
+      const paymentHistory = await paymentCollection.countDocuments(query);
+
+      res.send({ result, paymentHistory });
+    });
 
     app.get("/services", async (req, res) => {
       const { search, type, limit, min, max } = req.query;
