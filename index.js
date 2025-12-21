@@ -16,6 +16,14 @@ const client = new MongoClient(uri, {
   },
 });
 
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./home-deco-firebase-adminsdk.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 // middleware
 app.use(cors());
 app.use(express.json());
@@ -31,6 +39,24 @@ function generateTrackingId() {
   return `${prefix}${date}-${randomPart}`;
 }
 
+const verifyFBToken = async (req, res, next) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  try {
+    const idToken = token.split(" ")[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    console.log("decoded in the token", decoded);
+    req.decoded_email = decoded.email;
+    next();
+  } catch (err) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+};
+
 async function run() {
   try {
     // await client.connect();
@@ -40,6 +66,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const bookingCollection = db.collection("booking");
     const paymentCollection = db.collection("payments");
+    const decoratorsCollection = db.collection("decorators");
 
     // users related apis
     // app.get("/users", verifyFBToken, async (req, res) => {
@@ -79,6 +106,20 @@ async function run() {
       }
 
       const result = await usersCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.post("/decorator", verifyFBToken, async (req, res) => {
+      const newDecorator = req.body;
+
+      const userExist = await decoratorsCollection.findOne({
+        email: newDecorator.email,
+      });
+      if (userExist) {
+        return res.send({ message: "You already Exist" });
+      }
+      newDecorator.applyStatus = "pending";
+      const result = await decoratorsCollection.insertOne(newDecorator);
       res.send(result);
     });
 
@@ -136,8 +177,6 @@ async function run() {
       res.send(result);
     });
 
-  
-
     // paymant
     app.post("/payment-checkout-session", async (req, res) => {
       const packageInfo = req.body;
@@ -176,8 +215,9 @@ async function run() {
         const session = await stripe.checkout.sessions.retrieve(sessionId);
 
         const transactionId = session.payment_intent;
+        const query = { transactionId: transactionId };
 
-        const paymentExist = await paymentCollection.findOne({ transactionId });
+        const paymentExist = await paymentCollection.findOne(query);
         if (paymentExist) {
           return res.send({
             message: "already exists",
@@ -188,8 +228,8 @@ async function run() {
 
         const trackingId = session.metadata.trackingId;
         const bookingId = session.metadata.bookingId;
-        const servicesId  = session.metadata.servicesId
-        const service_name= session.metadata.service_name
+        const servicesId = session.metadata.servicesId;
+        const service_name = session.metadata.service_name;
 
         if (session.payment_status === "paid") {
           await bookingCollection.updateOne(
@@ -231,20 +271,24 @@ async function run() {
       }
     });
 
-     app.get("/payment-history", async (req, res) => {
+    app.get("/payment-history", verifyFBToken, async (req, res) => {
       const email = req.query.email;
       const sort = req.query.sort || "desc";
 
       const query = {};
       if (email) {
         query.email = email;
+        // check email address
+        if (email !== req.decoded_email) {
+          return res.status(403).send({ message: "forbidden access" });
+        }
       }
 
       const sortValue = sort === "desc" ? -1 : 1;
 
       const result = await paymentCollection
         .find(query)
-        .sort({ createdAt: sortValue })
+        .sort({ paidAt: sortValue })
         .toArray();
 
       const paymentHistory = await paymentCollection.countDocuments(query);
