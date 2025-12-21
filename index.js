@@ -18,7 +18,7 @@ const client = new MongoClient(uri, {
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./home-deco-firebase-adminsdk.json");
+const serviceAccount = require("./home-deco-firebase-adminsdk-fbsvc.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -122,6 +122,47 @@ async function run() {
       const result = await decoratorsCollection.insertOne(newDecorator);
       res.send(result);
     });
+
+    app.get('/decorators',  async (req, res) => {
+      const category = req.query.category
+      const query = {}
+      if (category) {
+        query.service_type = category
+        query.applyStatus = "accepted"
+      }
+      const result = await decoratorsCollection.find(query).toArray()
+      res.send(result)
+    })
+
+      app.delete('/decorator/:id', async (req, res) => {
+      const { id } = req.params
+      const query = { _id: new ObjectId(id) }
+      const result = await decoratorsCollection.deleteOne(query)
+      res.send(result)
+    })
+
+    app.patch('/decorator/:id', async (req, res) => {
+      const { id } = req.params
+      const { status, email } = req.body
+      const query = { _id: new ObjectId(id) }
+      const update = {
+        $set: { applyStatus: status }
+      }
+      const result = await decoratorsCollection.updateOne(query, update)
+
+      // update user role 
+      if (status === "accepted") {
+        const query = {}
+        if (email) {
+          query.email = email
+        }
+        const updateRole = {
+          $set: { role: "decorator" }
+        }
+        const userResult = await usersCollection.updateOne(query, updateRole)
+      }
+      res.send(result)
+    })
 
     app.post("/services", async (req, res) => {
       const newServices = req.body;
