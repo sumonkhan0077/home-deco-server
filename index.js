@@ -68,17 +68,17 @@ async function run() {
     const paymentCollection = db.collection("payments");
     const decoratorsCollection = db.collection("decorators");
 
-       const verifyAdmin = async (req, res, next) => {
-            const email = req.decoded_email;
-            const query = { email };
-            const user = await usersCollection.findOne(query);
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
 
-            if (!user || user.role !== 'admin') {
-                return res.status(403).send({ message: 'forbidden access' });
-            }
+      if (!user || user.role !== "admin") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
 
-            next();
-        }
+      next();
+    };
 
     // users related apis
     app.get("/users", verifyFBToken, async (req, res) => {
@@ -109,7 +109,7 @@ async function run() {
     app.patch(
       "/users/:id/role",
       verifyFBToken,
-     
+
       async (req, res) => {
         const id = req.params.id;
         const roleInfo = req.body;
@@ -124,7 +124,7 @@ async function run() {
       }
     );
 
-     app.delete("/users/:id", async (req, res) => {
+    app.delete("/users/:id", async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(query);
@@ -171,41 +171,45 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/decorator/:id",  verifyFBToken, verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const query = { _id: new ObjectId(id) };
-      const result = await decoratorsCollection.deleteOne(query);
-      res.send(result);
-    });
-
-    app.patch("/decorator/:id", verifyFBToken, verifyAdmin, async (req, res) => {
-      const { id } = req.params;
-      const { status, email } = req.body;
-      const query = { _id: new ObjectId(id) };
-      const update = {
-        $set: { applyStatus: status },
-      };
-      const result = await decoratorsCollection.updateOne(query, update);
-
-      // update user role
-      if (status === "accepted") {
-        const query = {};
-        if (email) {
-          query.email = email;
-        }
-        const updateRole = {
-          $set: { role: "decorator" },
-        };
-        const userResult = await usersCollection.updateOne(query, updateRole);
+    app.delete(
+      "/decorator/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const query = { _id: new ObjectId(id) };
+        const result = await decoratorsCollection.deleteOne(query);
+        res.send(result);
       }
-      res.send(result);
-    });
+    );
 
-    app.post("/services", async (req, res) => {
-      const newServices = req.body;
-      const result = await servicesCollection.insertOne(newServices);
-      res.send(result);
-    });
+    app.patch(
+      "/decorator/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { status, email } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const update = {
+          $set: { applyStatus: status },
+        };
+        const result = await decoratorsCollection.updateOne(query, update);
+
+        // update user role
+        if (status === "accepted") {
+          const query = {};
+          if (email) {
+            query.email = email;
+          }
+          const updateRole = {
+            $set: { role: "decorator" },
+          };
+          const userResult = await usersCollection.updateOne(query, updateRole);
+        }
+        res.send(result);
+      }
+    );
 
     app.post("/booking", async (req, res) => {
       const booking = req.body;
@@ -374,6 +378,35 @@ async function run() {
       res.send({ result, paymentHistory });
     });
 
+    app.patch("/services/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedService = req.body;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: { 
+          service_name: updatedService.service_name,
+          image: updatedService.image,
+          costs: updatedService.costs,
+          currency: updatedService.currency,
+          unit: updatedService.unit,
+          service_category: updatedService.service_category,
+          service_type: updatedService.service_type,
+          description: updatedService.description,
+          time: updatedService.time,
+          rating: updatedService.rating,
+          createdByEmail: updatedService.createdByEmail,
+        },
+      };
+      const result = await servicesCollection.updateOne(query, update);
+      res.send(result);
+    });
+
+    app.post("/services", async (req, res) => {
+      const newServices = req.body;
+      const result = await servicesCollection.insertOne(newServices);
+      res.send(result);
+    });
+
     app.get("/services", async (req, res) => {
       const { search, type, limit, min, max } = req.query;
       const query = {};
@@ -405,12 +438,17 @@ async function run() {
       }
     });
 
-    app.delete("/services/:id",  async (req, res) => {
-      const { id } = req.params;
-      const query = { _id: new ObjectId(id) };
-      const result = await servicesCollection.deleteOne(query);
-      res.send(result);
-    });
+    app.delete(
+      "/services/:id",
+      verifyFBToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const query = { _id: new ObjectId(id) };
+        const result = await servicesCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
 
     app.get("/services/:id", async (req, res) => {
       const id = req.params.id;
