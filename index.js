@@ -68,6 +68,18 @@ async function run() {
     const paymentCollection = db.collection("payments");
     const decoratorsCollection = db.collection("decorators");
 
+       const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+
+            next();
+        }
+
     // users related apis
     app.get("/users", verifyFBToken, async (req, res) => {
       const searchText = req.query.searchText;
@@ -159,14 +171,14 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/decorator/:id", async (req, res) => {
+    app.delete("/decorator/:id",  verifyFBToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const query = { _id: new ObjectId(id) };
       const result = await decoratorsCollection.deleteOne(query);
       res.send(result);
     });
 
-    app.patch("/decorator/:id", async (req, res) => {
+    app.patch("/decorator/:id", verifyFBToken, verifyAdmin, async (req, res) => {
       const { id } = req.params;
       const { status, email } = req.body;
       const query = { _id: new ObjectId(id) };
@@ -391,6 +403,13 @@ async function run() {
       } catch (error) {
         res.status(500).send({ message: "Error fetching services" });
       }
+    });
+
+    app.delete("/services/:id",  async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await servicesCollection.deleteOne(query);
+      res.send(result);
     });
 
     app.get("/services/:id", async (req, res) => {
