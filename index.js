@@ -69,30 +69,55 @@ async function run() {
     const decoratorsCollection = db.collection("decorators");
 
     // users related apis
-    // app.get("/users", verifyFBToken, async (req, res) => {
-    //   const searchText = req.query.searchText;
-    //   const query = {};
-    //   if (searchText) {
-    //     // query.displayName = {$regex: searchText, $options: 'i'}
-    //     query.$or = [
-    //       { displayName: { $regex: searchText, $options: "i" } },
-    //       { email: { $regex: searchText, $options: "i" } },
-    //     ];
-    //   }
-    //   const cursor = usersCollection
-    //     .find(query)
-    //     .sort({ createdAt: -1 })
-    //     .limit(5);
-    //   const result = await cursor.toArray();
-    //   res.send(result);
-    // });
+    app.get("/users", verifyFBToken, async (req, res) => {
+      const searchText = req.query.searchText;
+      const query = {};
+      if (searchText) {
+        // query.displayName = {$regex: searchText, $options: 'i'}
+        query.$or = [
+          { displayName: { $regex: searchText, $options: "i" } },
+          { email: { $regex: searchText, $options: "i" } },
+        ];
+      }
+      const cursor = usersCollection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .limit(5);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-    // app.get("/users/:email/role", async (req, res) => {
-    //   const email = req.params.email;
-    //   const query = { email };
-    //   const user = await usersCollection.findOne(query);
-    //   res.send({ role: user?.role || "user" });
-    // });
+    app.get("/users/:email/role", async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      res.send({ role: user?.role || "user" });
+    });
+
+    app.patch(
+      "/users/:id/role",
+      verifyFBToken,
+     
+      async (req, res) => {
+        const id = req.params.id;
+        const roleInfo = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updatedDocor = {
+          $set: {
+            role: roleInfo.role,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updatedDocor);
+        res.send(result);
+      }
+    );
+
+     app.delete("/users/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    });
 
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -123,46 +148,46 @@ async function run() {
       res.send(result);
     });
 
-    app.get('/decorators',  async (req, res) => {
-      const category = req.query.category
-      const query = {}
+    app.get("/decorators", async (req, res) => {
+      const category = req.query.category;
+      const query = {};
       if (category) {
-        query.service_type = category
-        query.applyStatus = "accepted"
+        query.service_type = category;
+        query.applyStatus = "accepted";
       }
-      const result = await decoratorsCollection.find(query).toArray()
-      res.send(result)
-    })
+      const result = await decoratorsCollection.find(query).toArray();
+      res.send(result);
+    });
 
-      app.delete('/decorator/:id', async (req, res) => {
-      const { id } = req.params
-      const query = { _id: new ObjectId(id) }
-      const result = await decoratorsCollection.deleteOne(query)
-      res.send(result)
-    })
+    app.delete("/decorator/:id", async (req, res) => {
+      const { id } = req.params;
+      const query = { _id: new ObjectId(id) };
+      const result = await decoratorsCollection.deleteOne(query);
+      res.send(result);
+    });
 
-    app.patch('/decorator/:id', async (req, res) => {
-      const { id } = req.params
-      const { status, email } = req.body
-      const query = { _id: new ObjectId(id) }
+    app.patch("/decorator/:id", async (req, res) => {
+      const { id } = req.params;
+      const { status, email } = req.body;
+      const query = { _id: new ObjectId(id) };
       const update = {
-        $set: { applyStatus: status }
-      }
-      const result = await decoratorsCollection.updateOne(query, update)
+        $set: { applyStatus: status },
+      };
+      const result = await decoratorsCollection.updateOne(query, update);
 
-      // update user role 
+      // update user role
       if (status === "accepted") {
-        const query = {}
+        const query = {};
         if (email) {
-          query.email = email
+          query.email = email;
         }
         const updateRole = {
-          $set: { role: "decorator" }
-        }
-        const userResult = await usersCollection.updateOne(query, updateRole)
+          $set: { role: "decorator" },
+        };
+        const userResult = await usersCollection.updateOne(query, updateRole);
       }
-      res.send(result)
-    })
+      res.send(result);
+    });
 
     app.post("/services", async (req, res) => {
       const newServices = req.body;
