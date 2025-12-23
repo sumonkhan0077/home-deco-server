@@ -192,7 +192,12 @@ async function run() {
         const { status, email } = req.body;
         const query = { _id: new ObjectId(id) };
         const update = {
-          $set: { applyStatus: status },
+          $set:
+           { 
+            applyStatus: status,
+            workStatus:"available",
+           },
+
         };
         const result = await decoratorsCollection.updateOne(query, update);
 
@@ -243,6 +248,28 @@ async function run() {
 
       res.send({ result, totalBooking });
     });
+
+   
+     app.get('/bookings', verifyFBToken, verifyAdmin, async (req, res) => {
+      const serviceWorkStatus = req.query.serviceWorkStatus
+      const query = {}
+      if (serviceWorkStatus) {
+        query.serviceWorkStatus = serviceWorkStatus
+      }
+      const result = await bookingCollection.find(query).toArray()
+      res.send(result)
+    })
+
+      app.patch('/booking/:id', async (req, res) => {
+      const id = req.params.id
+      const assignDecoratorInfo = req.body
+      const query = { _id: new ObjectId(id) }
+      const update = {
+        $set: { ...assignDecoratorInfo, serviceWorkStatus: "assign" }
+      }
+      const result = await bookingCollection.updateOne(query, update)
+      res.send(result)
+    })
 
     app.get("/booking/:id", async (req, res) => {
       const id = req.params.id;
@@ -319,6 +346,7 @@ async function run() {
             {
               $set: {
                 paymentStatus: "paid",
+                serviceWorkStatus:"pending",
                 transactionId,
                 paidAt: new Date(),
               },
