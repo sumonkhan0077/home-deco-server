@@ -192,12 +192,10 @@ async function run() {
         const { status, email } = req.body;
         const query = { _id: new ObjectId(id) };
         const update = {
-          $set:
-           { 
+          $set: {
             applyStatus: status,
-            workStatus:"available",
-           },
-
+            workStatus: "available",
+          },
         };
         const result = await decoratorsCollection.updateOne(query, update);
 
@@ -249,27 +247,58 @@ async function run() {
       res.send({ result, totalBooking });
     });
 
-   
-     app.get('/bookings', verifyFBToken, verifyAdmin, async (req, res) => {
-      const serviceWorkStatus = req.query.serviceWorkStatus
-      const query = {}
+    app.get("/bookings", verifyFBToken, verifyAdmin, async (req, res) => {
+      const serviceWorkStatus = req.query.serviceWorkStatus;
+      const query = {};
       if (serviceWorkStatus) {
-        query.serviceWorkStatus = serviceWorkStatus
+        query.serviceWorkStatus = serviceWorkStatus;
       }
-      const result = await bookingCollection.find(query).toArray()
-      res.send(result)
-    })
+      const result = await bookingCollection.find(query).toArray();
+      res.send(result);
+    });
 
-      app.patch('/booking/:id', async (req, res) => {
-      const id = req.params.id
-      const assignDecoratorInfo = req.body
-      const query = { _id: new ObjectId(id) }
+    app.patch("/booking/:id", async (req, res) => {
+      const id = req.params.id;
+      const assignDecoratorInfo = req.body;
+      const query = { _id: new ObjectId(id) };
       const update = {
-        $set: { ...assignDecoratorInfo, serviceWorkStatus: "assign" }
+        $set: { ...assignDecoratorInfo, serviceWorkStatus: "assign" },
+      };
+      const result = await bookingCollection.updateOne(query, update);
+      res.send(result);
+    });
+
+    app.patch("/booking/service/:id", async (req, res) => {
+      const { id } = req.params;
+      console.log(req.body);
+      const status = req.body.status;
+      const query = { _id: new ObjectId(id) };
+      const update = {
+        $set: { serviceWorkStatus: status },
+      };
+      const result = await bookingCollection.updateOne(query, update);
+      res.send(result);
+    });
+
+    app.get("/bookings/decorator", async (req, res) => {
+      const { email, serviceWorkStatus } = req.query;
+      const query = {};
+
+      if (email) {
+        query.decoratorEmail = email;
       }
-      const result = await bookingCollection.updateOne(query, update)
-      res.send(result)
-    })
+
+      if (serviceWorkStatus) {
+        query.serviceWorkStatus = serviceWorkStatus;
+      }
+
+      const result = await bookingCollection
+        .find(query)
+        .sort({ event_date: 1 })
+        .toArray();
+
+      res.send(result);
+    });
 
     app.get("/booking/:id", async (req, res) => {
       const id = req.params.id;
@@ -346,7 +375,7 @@ async function run() {
             {
               $set: {
                 paymentStatus: "paid",
-                serviceWorkStatus:"pending",
+                serviceWorkStatus: "pending",
                 transactionId,
                 paidAt: new Date(),
               },
@@ -411,7 +440,7 @@ async function run() {
       const updatedService = req.body;
       const query = { _id: new ObjectId(id) };
       const update = {
-        $set: { 
+        $set: {
           service_name: updatedService.service_name,
           image: updatedService.image,
           costs: updatedService.costs,
