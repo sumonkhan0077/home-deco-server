@@ -79,6 +79,17 @@ async function run() {
 
       next();
     };
+    const verifyDeco = async (req, res, next) => {
+      const email = req.decoded_email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+
+      if (!user || user.role !== "decorator") {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+
+      next();
+    };
 
     // users related apis
     app.get("/users", verifyFBToken, async (req, res) => {
@@ -227,7 +238,7 @@ async function run() {
     });
 
     app.get("/dashboard/my-bookings", async (req, res) => {
-      const{ email, paymentStatus} = req.query;
+      const { email, paymentStatus } = req.query;
       const sort = req.query.sort || "desc";
 
       const query = {};
