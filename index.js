@@ -227,12 +227,15 @@ async function run() {
     });
 
     app.get("/dashboard/my-bookings", async (req, res) => {
-      const email = req.query.email;
+      const{ email, paymentStatus} = req.query;
       const sort = req.query.sort || "desc";
 
       const query = {};
       if (email) {
         query.email = email;
+      }
+      if (paymentStatus) {
+        query.paymentStatus = paymentStatus;
       }
 
       const sortValue = sort === "desc" ? -1 : 1;
