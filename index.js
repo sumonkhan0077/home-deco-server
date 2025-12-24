@@ -20,7 +20,9 @@ const admin = require("firebase-admin");
 
 // const serviceAccount = require("./home-deco-firebase-adminsdk-fbsvc.json");
 
-const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
+  "utf8"
+);
 const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
@@ -99,7 +101,6 @@ async function run() {
       const searchText = req.query.searchText;
       const query = {};
       if (searchText) {
-    
         query.$or = [
           { displayName: { $regex: searchText, $options: "i" } },
           { email: { $regex: searchText, $options: "i" } },
@@ -241,7 +242,7 @@ async function run() {
     });
 
     app.get("/dashboard/my-bookings", async (req, res) => {
-      const { email, paymentStatus, limit=0, skip=0 } = req.query;
+      const { email, paymentStatus, limit = 0, skip = 0 } = req.query;
       const sort = req.query.sort || "desc";
 
       const query = {};
@@ -484,39 +485,49 @@ async function run() {
     });
 
     app.get("/services", async (req, res) => {
-      const { search, type, limit=0, skip=0, min, max } = req.query;
+      const { search, type, limit = 0, skip = 0, min, max } = req.query;
+
       const query = {};
+
       if (search) {
         query.service_name = { $regex: search, $options: "i" };
       }
       if (type) {
         query.service_category = { $regex: type, $options: "i" };
       }
+
+      // Price filter (costs হলো array ধরে নিয়ে)
       const minVal = parseInt(min);
       const maxVal = parseInt(max);
 
-      if (!isNaN(minVal) && !isNaN(maxVal)) {
-        costs = { $elemMatch: { $gte: minVal, $lte: maxVal } };
-      } else if (!isNaN(minVal)) {
-        query.costs = { $gte: minVal };
-      } else if (!isNaN(maxVal)) {
-        query.costs = { $lte: maxVal };
+      if (!isNaN(minVal) || !isNaN(maxVal)) {
+        query.costs = { $elemMatch: {} }; // base
+
+        if (!isNaN(minVal) && !isNaN(maxVal)) {
+          query.costs.$elemMatch.$gte = minVal;
+          query.costs.$elemMatch.$lte = maxVal;
+        } else if (!isNaN(minVal)) {
+          query.costs.$elemMatch.$gte = minVal;
+        } else if (!isNaN(maxVal)) {
+          query.costs.$elemMatch.$lte = maxVal;
+        }
       }
-      const totalServices = await servicesCollection.countDocuments(query)
-      
 
       try {
+        const totalServices = await servicesCollection.countDocuments(query);
+
         const result = await servicesCollection
           .find(query)
           .limit(parseInt(limit) || 0)
           .skip(Number(skip) || 0)
           .toArray();
-        res.send({ result , totalServices });
+
+        res.send({ result, totalServices });
       } catch (error) {
+        console.error(error);
         res.status(500).send({ message: "Error fetching services" });
       }
     });
-
     app.delete(
       "/services/:id",
       verifyFBToken,
